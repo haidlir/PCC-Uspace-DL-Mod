@@ -19,8 +19,8 @@ all:
 	$(MAKE) -C core all
 	$(MAKE) -C app all
 	$(CC) $(LIB_OBJECTS) $(CCFLAGS) -shared -o core/libudt.so $(LDFLAGS)
-	$(CC) app/pccserver.o $(CCFLAGS) -o app/pccserver $(LDFLAGS) -ludt
-	$(CC) app/pccclient.o $(CCFLAGS) -o app/pccclient $(LDFLAGS) -ludt
+	$(CC) app/pccserver.o $(CCFLAGS) -o app/pccserver_mod $(LDFLAGS) -ludt
+	$(CC) app/pccclient.o $(CCFLAGS) -o app/pccclient_mod $(LDFLAGS) -ludt
 
 clean:
 	$(MAKE) -C pcc/monitor_interval clean

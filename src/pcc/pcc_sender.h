@@ -179,6 +179,11 @@ class QUIC_EXPORT_PRIVATE PccSender
   QuicRandom* random_;
   #else
   QuicTime avg_rtt_;
+  // Additional RTT Stats
+  QuicTime rtt_stats_smoothed_rtt_;
+  QuicTime rtt_stats_latest_rtt_;
+//   QuicTime rtt_stats_min_rtt_;
+//   QuicTime rtt_stats_rtt_var_;
   #endif
   
   PccUtilityCalculator* utility_calculator_;

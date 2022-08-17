@@ -53,7 +53,7 @@ const size_t kInitialRttMicroseconds = 1 * 1000;
 // Number of bits per byte.
 const size_t kBitsPerByte = 8;
 // Duration of monitor intervals as a proportion of RTT.
-const float kMonitorIntervalDuration = 0.5f;
+const float kMonitorIntervalDuration = 1.5f;
 // Minimum number of packets in a monitor interval.
 const size_t kMinimumPacketsPerInterval = 5;
 }  // namespace
@@ -170,6 +170,14 @@ void PccSender::UpdateCurrentRttEstimate(QuicTime rtt) {
     return;
     #else
     avg_rtt_ = rtt;
+    // Additional RTT Stats
+    rtt_stats_latest_rtt_ = rtt;
+    if (rtt_stats_smoothed_rtt_ == 0) {
+      rtt_stats_smoothed_rtt_ = rtt;
+    } else {
+      rtt_stats_smoothed_rtt_ = 0.875 * rtt_stats_smoothed_rtt_ + 0.125 * rtt;
+    }
+    // std::cout << "PCC: smoothed_rtt = " << rtt_stats_smoothed_rtt_ << std::endl;
     #endif
 }
 
@@ -177,7 +185,8 @@ QuicTime PccSender::GetCurrentRttEstimate(QuicTime sent_time) {
     #ifdef QUIC_PORT
     return rtt_stats_->smoothed_rtt();
     #else
-    return avg_rtt_;
+    // return avg_rtt_;
+    return rtt_stats_smoothed_rtt_;
     #endif
 }
 
@@ -185,7 +194,7 @@ QuicBandwidth PccSender::UpdateSendingRate(QuicTime event_time) {
     rate_control_lock_->lock();
   sending_rate_ = rate_controller_->GetNextSendingRate(sending_rate_, event_time);
     rate_control_lock_->unlock();
-  //std::cout << "PCC: rate = " << sending_rate_ << std::endl;
+  // std::cout << "PCC: rate = " << sending_rate_ << std::endl;
   return sending_rate_;
 }
 
@@ -214,6 +223,14 @@ void PccSender::OnPacketSent(QuicTime sent_time,
     #endif
   }
   interval_queue_.OnPacketSent(sent_time, packet_number, bytes);
+  while (interval_queue_.HasFinishedInterval(sent_time)) {
+    MonitorInterval mi = interval_queue_.Pop();
+    //std::cerr << "MI Finished with: " << mi.n_packets_sent << ", loss " << mi.GetObsLossRate() << std::endl;
+    mi.SetUtility(utility_calculator_->CalculateUtility(interval_analysis_group_, mi));
+    rate_control_lock_->lock();
+    rate_controller_->MonitorIntervalFinished(mi);
+    rate_control_lock_->unlock();
+  }
 }
 
 void PccSender::OnCongestionEvent(UDT_UNUSED bool rtt_updated,
@@ -229,20 +246,13 @@ void PccSender::OnCongestionEvent(UDT_UNUSED bool rtt_updated,
     UpdateCurrentRttEstimate(rtt);
   }
   #endif
-  int64_t rtt_estimate = GetCurrentRttEstimate(event_time); 
+  // int64_t rtt_estimate = GetCurrentRttEstimate(event_time); 
   
   interval_queue_.OnCongestionEvent(acked_packets, 
                                     lost_packets,
-                                    rtt_estimate, 
+                                    // rtt_estimate,
+                                    rtt_stats_latest_rtt_, 
                                     event_time);
-  while (interval_queue_.HasFinishedInterval(event_time)) {
-    MonitorInterval mi = interval_queue_.Pop();
-    //std::cerr << "MI Finished with: " << mi.n_packets_sent << ", loss " << mi.GetObsLossRate() << std::endl;
-    mi.SetUtility(utility_calculator_->CalculateUtility(interval_analysis_group_, mi));
-    rate_control_lock_->lock();
-    rate_controller_->MonitorIntervalFinished(mi);
-    rate_control_lock_->unlock();
-  }
 }
 
 #ifdef QUIC_PORT
